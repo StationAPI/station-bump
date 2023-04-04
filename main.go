@@ -30,4 +30,6 @@ func main() {
 			fmt.Println(err)
 		}
 	})
+	
+	http.ListenAndServe(":3000", r)
 }
