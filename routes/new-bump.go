@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -16,7 +17,7 @@ type Request struct {
 }
 
 func NewBump(w http.ResponseWriter, r *http.Request, db gorm.DB) error {
-	cookie, cookieErr := r.Cookie("station")		
+	cookie, cookieErr := r.Cookie("station")
 
 	if cookieErr != nil {
 		http.Error(w, "you are not authentictaed", http.StatusForbidden)
@@ -24,7 +25,7 @@ func NewBump(w http.ResponseWriter, r *http.Request, db gorm.DB) error {
 		return cookieErr
 	}
 
-	githubId, authErr := session.GetSession(cookie.Value) 
+	githubId, authErr := session.GetSession(cookie.Value)
 
 	if authErr != nil {
 		http.Error(w, "you are not authenticated", http.StatusForbidden)
@@ -45,10 +46,10 @@ func NewBump(w http.ResponseWriter, r *http.Request, db gorm.DB) error {
 	_, user := neon.GetUser(githubId, db)
 
 	if user.Bumps > 0 {
-		neon.Bump(website.Id, db)		
+		neon.Bump(website.Id, db)
 
 		return nil
-	}		
+	}
 
 	stripe.Key = os.Getenv("STRIPE_KEY")
 
@@ -56,12 +57,17 @@ func NewBump(w http.ResponseWriter, r *http.Request, db gorm.DB) error {
 		&stripe.CheckoutSessionParams{
 			LineItems: []*stripe.CheckoutSessionLineItemParams{
 				{
-					Price: stripe.String(os.Getenv("STRIPE_PRICE_ID")),
+					Price:    stripe.String(os.Getenv("STRIPE_PRICE_ID")),
 					Quantity: stripe.Int64(1),
 				},
 			},
 			Mode: stripe.String("payment"),
-			SuccessURL: stripe.String(os.Getenv("STRIPE_SUCCESS_URL")),
+			SuccessURL: stripe.String(
+				fmt.Sprintf(
+					"%s?session_id={CHECKOUT_SESSION_ID}",
+					os.Getenv("STRIPE_SUCCESS_URL"),
+				),
+			),
 		},
 	)
 
@@ -70,6 +76,8 @@ func NewBump(w http.ResponseWriter, r *http.Request, db gorm.DB) error {
 
 		return nil
 	}
+
+	http.Redirect(w, r, stripeSession.URL, http.StatusFound)
 
 	return nil
 }
